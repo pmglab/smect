@@ -31,11 +31,11 @@ java -Xmx56g -jar ./kgga.jar  \
 
 
  
-# 使用关联数组存储每个Condition的原始Enrichment值（数组）
+# Use associative arrays to store raw enrichment values for each condition (array)
 declare -A enrichment_values
 declare -A significant_count
 
-# 定义文件路径模式
+# Define file path patterns
 
 file_pattern2="./Sim_hot30/ExpressionPhenotypeSimulateTask/gene.spatial.expression.txt."
 file_pattern1="./Sim_hot30/ExpressionPhenotypeSimulateTask/phenotype.ped."
@@ -52,31 +52,31 @@ java -Xmx48g -jar ./kgga.jar  \
    --rsid-database dbsnp \
    --output-gty-format PLINK_BED
    
-# 遍历所有匹配的文件
+# Iterate over all matching files
 INPUT_DIR="./Sim_hot30/ExpressionPhenotypeSimulateTask"
 OUTPUT_BASE_DIR="./Sim_hot30/simulateS.assoc"
 
-# 创建输出目录
+# Create output directory
 mkdir -p "$OUTPUT_BASE_DIR"
 
-# 批量处理从8到99的文件
+# Batch process files from 0 to 99
 for i in {0..99}; do
     PED_FILE="$INPUT_DIR/phenotype.ped.$i"
     OUTPUT_DIR="$OUTPUT_BASE_DIR/simulateS.assoc_${i}_random"
     
-    # 检查输入文件是否存在
+    # Check if input file exists
     if [ ! -f "$PED_FILE" ]; then
-        echo "文件 $PED_FILE 不存在，跳过"
+        echo "File $PED_FILE does not exist, skipping"
         continue
     fi
     
-    # 创建对应的输出目录
+    # Create corresponding output directory
     mkdir -p "$OUTPUT_DIR"
     
-    echo "正在处理: $PED_FILE"
-    echo "输出到: $OUTPUT_DIR"
+    echo "Processing: $PED_FILE"
+    echo "Output to: $OUTPUT_DIR"
     
-    # 执行Java命令
+    # Execute Java command
     java -Xmx48g -jar ./kgga.jar \
          prune \
        --input-gty-file ./sdese.variants.annot.hg38.gtb \
@@ -92,14 +92,14 @@ for i in {0..99}; do
        --gene-feature-included 0~14 \
        --p-cut 1 \
        --assoc method=logistic-add
-    # 检查命令执行状态
+    # Check command execution status
     if [ $? -eq 0 ]; then
-        echo "成功处理: $PED_FILE"
+        echo "Successfully processed: $PED_FILE"
     else
-        echo "处理失败: $PED_FILE"
+        echo "Failed to process: $PED_FILE"
     fi
     
     echo "----------------------------------------"
 done
 
-echo "批量处理完成！"
+echo "Batch processing completed!"
