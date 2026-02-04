@@ -4,20 +4,20 @@ BASE_DIR="./"
 GSSTXT_DIR="${BASE_DIR}/Sim_hot30/ExpressionPhenotypeSimulateTask/gssfeather"
 ASSOC_BASE_DIR="${BASE_DIR}/simulateS.assoc"
 OUTPUT_BASE_DIR="${BASE_DIR}/Sim_hot30/DESE"
-THREADS=4  # 同时运行的任务数
+THREADS=4  # Number of concurrent tasks
 
-# 创建临时管道用于控制并发
+# Create temporary pipe for concurrency control
 tempfifo="batch_temp.$$"
 mkfifo ${tempfifo}
 exec 6<>${tempfifo}
 rm -f ${tempfifo}
 
-# 创建线程锁
+# Create thread locks for semaphore
 for ((i=0;i<${THREADS};i++)); do
     echo
 done >&6
 
-# 处理函数
+# Processing function
 process_file() {
     local gs_file="$1"
     local file_number=$(echo "${gs_file}" | grep -oE '[0-9]+$')
@@ -65,11 +65,11 @@ process_file() {
     fi
 }
 
-# 主循环 - 只处理编号74到99的文件
+# Main loop - process files with numbers from 0 to 99
 for file_num in {0..99}; do
     gs_file="${GSSTXT_DIR}/gene.spatial.expression.txt.${file_num}"
     
-    # 检查文件是否存在
+    # Check if file exists
     if [ ! -f "${gs_file}" ]; then
         echo "文件不存在: ${gs_file}，跳过"
         continue
