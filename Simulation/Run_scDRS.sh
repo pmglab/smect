@@ -1,10 +1,10 @@
 #!/bin/bash
-# 完整的数据处理与分析流程脚本
-# 包含: 数据预处理 → MAGMA分析 → 基因集生成 → 单细胞数据转换 → scDRS计算
+# Complete data processing and analysis pipeline
+# Includes: Data preprocessing → MAGMA analysis → Gene set generation → Single-cell data conversion → scDRS calculation
 
-set -e  # 遇到错误立即退出
+set -e  # Exit immediately on error
 
-# 配置变量
+# Configuration variables
 BASE_DIR="./Sim_hot30"
 SIM_ASSOC_DIR="${BASE_DIR}/simulateS.assoc"
 MAGMA_DIR="${BASE_DIR}/magma"
@@ -12,32 +12,32 @@ SCDRS_DIR="${BASE_DIR}/scDRS"
 RESULT_DIR="${BASE_DIR}/results"
 FEATHER_DIR="${BASE_DIR}/ExpressionPhenotypeSimulateTask/gssfeather"
 
-# 创建必要的目录
+# Create necessary directories
 mkdir -p "${MAGMA_DIR}" "${SCDRS_DIR}" "${RESULT_DIR}"
 
-echo "=== 开始完整数据处理流程 ==="
+echo "=== Starting complete data processing pipeline ==="
 
 # ============================================================================
-# 步骤1: 数据预处理 - 生成MAGMA输入文件
+# Step 1: Data preprocessing - Generate MAGMA input files
 # ============================================================================
-echo "步骤1: 数据预处理..."
+echo "Step 1: Data preprocessing..."
 
 if [ ! -d "${SIM_ASSOC_DIR}" ]; then
-    echo "错误: 基础目录 ${SIM_ASSOC_DIR} 不存在"
+    echo "Error: Base directory ${SIM_ASSOC_DIR} does not exist"
     exit 1
 fi
 
 for dir in "${SIM_ASSOC_DIR}"/simulateS.assoc_*_random; do
     if [ -d "$dir" ]; then
-        echo "正在处理: $(basename "$dir")"
+        echo "Processing: $(basename "$dir")"
         
-        # 检查输入文件
+        # Check input files
         if [ ! -f "${dir}/variants.hg38.tsv.gz" ] || [ ! -r "${dir}/variants.hg38.tsv.gz" ]; then
-            echo "警告: 无法读取 ${dir}/variants.hg38.tsv.gz，跳过"
+            echo "Warning: Cannot read ${dir}/variants.hg38.tsv.gz, skipping"
             continue
         fi
         
-        # 处理文件生成MAGMA格式[1](@ref)
+        # Process files to generate MAGMA format[1](@ref)
         zcat "${dir}/variants.hg38.tsv.gz" 2>/dev/null | 
         awk '
         BEGIN {
@@ -54,7 +54,7 @@ for dir in "${SIM_ASSOC_DIR}"/simulateS.assoc_*_random; do
                 if ($i == "disease_Assoc@Logistic_Add_P") p_col = i
             }
             if (chrom_col == 0 || pos_col == 0 || rsid_col == 0) {
-                print "错误: 缺少必要的列" > "/dev/stderr"
+                print "Error: Missing required columns" > "/dev/stderr"
                 exit 1
             }
             next
@@ -69,31 +69,31 @@ for dir in "${SIM_ASSOC_DIR}"/simulateS.assoc_*_random; do
         }' > "${dir}/variants.magma.sumstats.tsv"
         
         if [ $? -eq 0 ]; then
-            echo "完成: $(basename "$dir")"
+            echo "Completed: $(basename "$dir")"
         else
-            echo "错误: 处理 $(basename "$dir") 时失败"
+            echo "Error: Failed to process $(basename "$dir")"
         fi
     fi
 done
 
-echo "数据预处理完成!"
+echo "Data preprocessing completed!"
 
 # ============================================================================
-# 步骤2: MAGMA分析
+# Step 2: MAGMA analysis
 # ============================================================================
-echo "步骤2: 运行MAGMA分析..."
+echo "Step 2: Running MAGMA analysis..."
 
 for dir_path in "${SIM_ASSOC_DIR}"/simulateS.assoc_*_random; do
     dir_name=$(basename "$dir_path")
     number=$(echo "$dir_name" | sed -n 's/.*simulateS.assoc_\([0-9]*\)_random.*/\1/p')
     
     if [ -n "$number" ]; then
-        echo "正在处理: $dir_name (编号: $number)"
+        echo "Processing: $dir_name (Number: $number)"
         
         input_file="$dir_path/variants.magma.sumstats.tsv"
         
         if [ -f "$input_file" ]; then
-            # 运行MAGMA命令[1,4](@ref)
+            # Run MAGMA command[1,5](@ref)
             ./magma \
                 --bfile ./simLDref/variants.annot.hg38 \
                 --pval "$input_file" use='SNP,P' ncol='NOBS' \
@@ -101,31 +101,31 @@ for dir_path in "${SIM_ASSOC_DIR}"/simulateS.assoc_*_random; do
                 --out "${MAGMA_DIR}/simhot30_s${number}"
             
             if [ $? -eq 0 ]; then
-                echo "✓ 成功处理: $dir_name"
+                echo "✓ Successfully processed: $dir_name"
             else
-                echo "✗ 处理失败: $dir_name"
+                echo "✗ Processing failed: $dir_name"
             fi
         else
-            echo "✗ 输入文件不存在: $input_file"
+            echo "✗ Input file does not exist: $input_file"
         fi
     else
-        echo "✗ 无法从文件夹名提取数字: $dir_name"
+        echo "✗ Cannot extract number from folder name: $dir_name"
     fi
 done
 
-echo "MAGMA分析完成!"
+echo "MAGMA analysis completed!"
 
 # ============================================================================
-# 步骤3: 添加基因符号
+# Step 3: Add gene symbols
 # ============================================================================
-echo "步骤3: 添加基因符号..."
+echo "Step 3: Adding gene symbols..."
 
 for file in "${MAGMA_DIR}"/*.genes.out; do
     base=$(basename "$file")
     disease=${base%.genes.out}
     out_file="${file%.out}.with_symbol.out"
     
-    echo "处理: $base -> ${disease}.genes.with_symbol.out"
+    echo "Processing: $base -> ${disease}.genes.with_symbol.out"
     
     awk 'NR==FNR {map[$1]=$2; next} 
          FNR==1 {print "GENE\tSYMBOL\t" $0; next} 
@@ -133,12 +133,12 @@ for file in "${MAGMA_DIR}"/*.genes.out; do
          ./magma/id_to_symbol.txt "$file" > "$out_file"
 done
 
-echo "基因符号添加完成!"
+echo "Gene symbols added successfully!"
 
 # ============================================================================
-# 步骤4: 生成Z值汇总表 (Python脚本)
+# Step 4: Generate Z-score summary table (Python script)
 # ============================================================================
-echo "步骤4: 生成Z值汇总表..."
+echo "Step 4: Generating Z-score summary table..."
 
 python3 << 'EOF'
 import pandas as pd
@@ -177,19 +177,19 @@ for s_number, files in file_groups.items():
             else:
                 df_final = df_final.merge(df_trait, on='Gene', how='outer')
         except Exception as e:
-            print(f"处理文件 {file_path} 时出错: {e}")
+            print(f"Error processing file {file_path}: {e}")
     
     output_file = os.path.join(output_dir, f"all_traits_zscore_s{s_number}.tsv")
     df_final.to_csv(output_file, sep='\t', index=False)
-    print(f"成功处理了 {len(files)} 个性状文件，创建汇总文件: {output_file}")
+    print(f"Successfully processed {len(files)} trait files, created summary file: {output_file}")
 
-print("Z值汇总表生成完成!")
+print("Z-score summary table generation completed!")
 EOF
 
 # ============================================================================
-# 步骤5: 生成基因集文件
+# Step 5: Generate gene set files
 # ============================================================================
-echo "步骤5: 生成基因集文件..."
+echo "Step 5: Generating gene set files..."
 
 for zscore_file in "${MAGMA_DIR}"/all_traits_zscore_s*.tsv; do
     suffix=$(basename "$zscore_file" | sed 's/all_traits_zscore_//' | sed 's/\.tsv//')
@@ -201,15 +201,15 @@ for zscore_file in "${MAGMA_DIR}"/all_traits_zscore_s*.tsv; do
         --weight zscore \
         --n-max 1000
     
-    echo "处理完成: $zscore_file -> $out_file"
+    echo "Processing completed: $zscore_file -> $out_file"
 done
 
-echo "基因集文件生成完成!"
+echo "Gene set file generation completed!"
 
 # ============================================================================
-# 步骤6: 转换单细胞数据格式 (Python脚本)
+# Step 6: Convert single-cell data format (Python script)
 # ============================================================================
-echo "步骤6: 转换单细胞数据格式..."
+echo "Step 6: Converting single-cell data format..."
 
 python3 << 'EOF'
 import pandas as pd
@@ -238,13 +238,13 @@ for feather_path in feather_files:
     adata.write_h5ad(output_path)
     print(f"Saved: {output_path}")
 
-print("单细胞数据格式转换完成!")
+print("Single-cell data format conversion completed!")
 EOF
 
 # ============================================================================
-# 步骤7: 运行scDRS分析
+# Step 7: Run scDRS analysis
 # ============================================================================
-echo "步骤7: 运行scDRS分析..."
+echo "Step 7: Running scDRS analysis..."
 
 mkdir -p "${RESULT_DIR}"
 
@@ -257,7 +257,7 @@ for i in {0..99}; do
         TEMP_OUT_DIR="${RESULT_DIR}/temp_${BASENAME}"
         mkdir -p "$TEMP_OUT_DIR"
         
-        echo "正在处理文件: $BASENAME (编号: $i)"
+        echo "Processing file: $BASENAME (Number: $i)"
         
         scdrs compute-score \
             --h5ad-file "$H5AD_FILE" \
@@ -278,11 +278,11 @@ for i in {0..99}; do
         done
         
         rm -rf "$TEMP_OUT_DIR"
-        echo "已完成处理: $BASENAME"
+        echo "Completed processing: $BASENAME"
     else
-        echo "文件不存在，跳过: $H5AD_FILE"
+        echo "File does not exist, skipping: $H5AD_FILE"
     fi
 done
 
-echo "=== 完整流程执行完成! ==="
-echo "结果保存在: ${RESULT_DIR}"
+echo "=== Complete pipeline execution finished! ==="
+echo "Results saved in: ${RESULT_DIR}"
