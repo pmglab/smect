@@ -1,24 +1,24 @@
 #!/bin/bash
 
-# 设置错误处理：遇到错误立即退出，并显示行号
+# Error handling: exit immediately on errors and show line numbers
 set -euo pipefail
-trap 'echo "错误发生在行 $LINENO，命令: $BASH_COMMAND"; exit 1' ERR
+trap 'echo "Error occurred at line $LINENO, command: $BASH_COMMAND"; exit 1' ERR
 
-# 记录开始时间
-echo "脚本开始执行: $(date)"
+# Record start time
+echo "Script execution started: $(date)"
 START_TIME=$(date +%s)
 
-# 配置变量
+# Configuration variables
 WORKDIR_PARENT="./Sim_hot30/ExpressionPhenotypeSimulateTask/gss"
 INPUT_DIR="./Sim_hot30/ExpressionPhenotypeSimulateTask/h5ad_output"
 BASE_DIR="./Sim_hot30/simulateS.assoc"
 
-# 创建输出目录
-echo "创建输出目录..."
+# Create output directory
+echo "Creating output directory..."
 mkdir -p "$WORKDIR_PARENT"
 
-# 第一阶段：处理h5ad文件 - 查找潜在表示
-echo "开始第一阶段：处理h5ad文件查找潜在表示..."
+# Phase 1: Process h5ad files to find latent representations
+echo "Starting Phase 1: Processing h5ad files to find latent representations..."
 find "$INPUT_DIR" -name "gene.spatial.expression.txt.*.h5ad" | while read H5AD_FILE; do
     FILE_NUM=$(basename "$H5AD_FILE" | grep -oE '[0-9]+' | head -1)
     
@@ -27,7 +27,7 @@ find "$INPUT_DIR" -name "gene.spatial.expression.txt.*.h5ad" | while read H5AD_F
         SAMPLE_WORKDIR="${WORKDIR_PARENT}/${SAMPLE_NAME}"
         mkdir -p "$SAMPLE_WORKDIR"
         
-        echo "正在处理样本: $SAMPLE_NAME (编号: $FILE_NUM)"
+        echo "Processing sample: $SAMPLE_NAME (number: $FILE_NUM)"
         
         gsmap run_find_latent_representations \
             --workdir "$SAMPLE_WORKDIR" \
@@ -39,10 +39,10 @@ find "$INPUT_DIR" -name "gene.spatial.expression.txt.*.h5ad" | while read H5AD_F
 done
 
 wait
-echo "第一阶段完成: $(date)"
+echo "Phase 1 completed: $(date)"
 
-# 第二阶段：潜在表示到基因映射
-echo "开始第二阶段：潜在表示到基因映射..."
+# Phase 2: Latent representation to gene mapping
+echo "Starting Phase 2: Latent representation to gene mapping..."
 find "$INPUT_DIR" -name "gene.spatial.expression.txt.*.h5ad" | while read H5AD_FILE; do
     FILE_NUM=$(basename "$H5AD_FILE" | grep -oE '[0-9]+' | head -1)
     
@@ -50,7 +50,7 @@ find "$INPUT_DIR" -name "gene.spatial.expression.txt.*.h5ad" | while read H5AD_F
         SAMPLE_NAME=$(basename "$H5AD_FILE" .h5ad)
         SAMPLE_WORKDIR="${WORKDIR_PARENT}/${SAMPLE_NAME}"
         
-        echo "正在处理潜在表示到基因映射: $SAMPLE_NAME"
+        echo "Processing latent to gene mapping: $SAMPLE_NAME"
         
         gsmap run_latent_to_gene \
             --workdir "$SAMPLE_WORKDIR" \
@@ -63,13 +63,13 @@ find "$INPUT_DIR" -name "gene.spatial.expression.txt.*.h5ad" | while read H5AD_F
 done
 
 wait
-echo "第二阶段完成: $(date)"
+echo "Phase 2 completed: $(date)"
 
-# 第三阶段：生成LDSC格式GWAS文件
-echo "开始第三阶段：生成LDSC格式GWAS文件..."
+# Phase 3: Generate LDSC format GWAS files
+echo "Starting Phase 3: Generating LDSC format GWAS files..."
 for dir in ${BASE_DIR}/simulateS.assoc_*_random; do
     if [ -d "$dir" ]; then
-        echo "正在处理: $(basename $dir)"
+        echo "Processing: $(basename $dir)"
         
         if [ -f "${dir}/variants.hg38.tsv.gz" ]; then
             zcat "${dir}/variants.hg38.tsv.gz" |
@@ -99,36 +99,36 @@ for dir in ${BASE_DIR}/simulateS.assoc_*_random; do
             }' |
             gzip > "${dir}/variants.ldsc.anno.sumstats.gz"
             
-            echo "完成: $(basename $dir)"
+            echo "Completed: $(basename $dir)"
         else
-            echo "警告: ${dir}/variants.hg38.tsv.gz 不存在"
+            echo "Warning: ${dir}/variants.hg38.tsv.gz does not exist"
         fi
     fi
 done
 
-echo "第三阶段完成: $(date)"
+echo "Phase 3 completed: $(date)"
 
-# 第四阶段：生成LD分数（并发控制）
-echo "开始第四阶段：生成LD分数..."
+# Phase 4: Generate LD scores (with concurrency control)
+echo "Starting Phase 4: Generating LD scores..."
 MAX_CONCURRENT=4
 
-# 使用命名管道控制并发
+# Use named pipe for concurrency control
 temp_fifo="/tmp/$$.fifo"
 mkfifo $temp_fifo
 exec 6<>$temp_fifo
 rm -f $temp_fifo
 
-# 初始化令牌
+# Initialize tokens
 for ((i=1; i<=MAX_CONCURRENT; i++)); do
     echo
 done >&6
 
-# 遍历样本和染色体
+# Iterate through samples and chromosomes
 for SAMPLE_NUM in {0..99}; do
     for CHROM in {1..22}; do
         read -u6
         {
-            echo "开始处理样本 $SAMPLE_NUM, 染色体 $CHROM ..."
+            echo "Starting processing sample $SAMPLE_NUM, chromosome $CHROM ..."
             
             gsmap run_generate_ldscore \
                 --workdir "./Sim_hot30/ExpressionPhenotypeSimulateTask/gss/gene.spatial.expression.txt.${SAMPLE_NUM}" \
@@ -139,7 +139,7 @@ for SAMPLE_NUM in {0..99}; do
                 --gtf_annotation_file './genome_annotation/gtf/gencode.v46.basic.annotation.gtf' \
                 --gene_window_size 10000
 
-            echo "完成样本 $SAMPLE_NUM, 染色体 $CHROM"
+            echo "Completed sample $SAMPLE_NUM, chromosome $CHROM"
             echo >&6
         } &
     done
@@ -147,10 +147,10 @@ done
 
 wait
 exec 6>&-
-echo "第四阶段完成: $(date)"
+echo "Phase 4 completed: $(date)"
 
-# 第五阶段：运行空间LDSC分析（并发控制）
-echo "开始第五阶段：运行空间LDSC分析..."
+# Phase 5: Run spatial LDSC analysis (with concurrency control)
+echo "Starting Phase 5: Running spatial LDSC analysis..."
 MAX_CONCURRENT_JOBS=8
 
 for SAMPLE_NUM in {0..99}; do
@@ -167,12 +167,12 @@ for SAMPLE_NUM in {0..99}; do
 done
 
 wait
-echo "第五阶段完成: $(date)"
+echo "Phase 5 completed: $(date)"
 
-# 计算总执行时间
+# Calculate total execution time
 END_TIME=$(date +%s)
 ELAPSED_TIME=$((END_TIME - START_TIME))
 
-echo "所有任务处理完成！"
-echo "结果保存在: $WORKDIR_PARENT"
-echo "总执行时间: $((ELAPSED_TIME / 60)) 分钟 $((ELAPSED_TIME % 60)) 秒"
+echo "All tasks completed successfully!"
+echo "Results saved in: $WORKDIR_PARENT"
+echo "Total execution time: $((ELAPSED_TIME / 60)) minutes $((ELAPSED_TIME % 60)) seconds"
