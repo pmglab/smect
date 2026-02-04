@@ -6,90 +6,90 @@ from glob import glob
 
 def convert_spatial_to_h5ad(input_dir, output_subdir="h5ad_output", region_ranges=None):
     """
-    将空间转录组文本数据转换为h5ad格式，支持用户指定区域范围
+    Convert spatial transcriptomics text data to h5ad format, supporting user-specified region ranges.
     
-    参数:
-        input_dir (str): 输入文件目录路径
-        output_subdir (str): 输出子目录名称，默认为"h5ad_output"
-        region_ranges (list): 区域范围列表，每个元素为字典，包含区域名称和坐标范围
-            示例: [{"name": "Layer1", "x_range": (27, 30), "y_range": (27, 30)}]
-            如果为None，则使用默认范围
+    Parameters:
+        input_dir (str): Input directory path
+        output_subdir (str): Output subdirectory name, default "h5ad_output"
+        region_ranges (list): List of region ranges, each element is a dict containing region name and coordinate ranges
+            Example: [{"name": "Layer1", "x_range": (27, 30), "y_range": (27, 30)}]
+            If None, use default ranges
     
-    返回:
-        str: 输出目录路径
+    Returns:
+        str: Output directory path
     """
-    # 设置默认区域范围
+    # Set default region ranges
     if region_ranges is None:
         region_ranges = [
             {"name": "Layer1", "x_range": (27, 30), "y_range": (27, 30)},
-            {"name": "Layer2", "x_range": None, "y_range": None}  # 默认区域
+            {"name": "Layer2", "x_range": None, "y_range": None}  # Default region
         ]
     
-    # 设置输出路径
+    # Set output path
     output_dir = os.path.join(input_dir, output_subdir)
     os.makedirs(output_dir, exist_ok=True)
     
-    # 获取所有匹配的文件
+    # Get all matching files
     file_pattern = os.path.join(input_dir, "gene.spatial.expression.txt.*")
     file_paths = glob(file_pattern)
     
     if not file_paths:
-        print(f"在 {input_dir} 中未找到匹配的文件")
+        print(f"No matching files found in {input_dir}")
         return output_dir
     
-    # 处理每个文件
+    # Process each file
     for file_path in file_paths:
         try:
             adata = process_single_file(file_path, region_ranges)
             save_h5ad_file(adata, file_path, output_dir)
-            print(f"成功转换: {os.path.basename(file_path)}")
+            print(f"Successfully converted: {os.path.basename(file_path)}")
             
-            # 打印区域统计信息
+            # Print region statistics
             print_region_statistics(adata, region_ranges)
             
         except Exception as e:
-            print(f"处理文件 {file_path} 时出错: {str(e)}")
+            print(f"Error processing file {file_path}: {str(e)}")
             continue
     
-    print(f"转换完成！结果保存在: {output_dir}")
+    print(f"Conversion completed! Results saved in: {output_dir}")
     return output_dir
 
 
 def process_single_file(file_path, region_ranges):
     """
-    处理单个文件，将其转换为AnnData对象
+    Process a single file and convert it to an AnnData object.
     
-    参数:
-        file_path (str): 输入文件路径
-        region_ranges (list): 区域范围列表
+    Parameters:
+        file_path (str): Input file path
+        region_ranges (list): List of region ranges
     
-    返回:
-        ad.AnnData: 转换后的AnnData对象
+    Returns:
+        ad.AnnData: Converted AnnData object
     """
-    # 读取数据
+    # Read data
     df = pd.read_csv(file_path, sep="\t")
     
-    # 处理列名和基因名
+    # Process column names and gene names
     df, gene_names = extract_gene_names(df)
     
-    # 转置数据并设置基因名为列名
+    # Transpose data and set gene names as column names
     df = df.T
     df.columns = gene_names
     
-    # 解析坐标
+    # Parse coordinates
     coords = parse_coordinates(df.index)
     
-    # 创建观测名（添加C前缀）
+    # Create observation names (add C prefix)
     obs_names = create_observation_names(df.index)
     
-    # 创建AnnData对象
+    # Create AnnData object
     adata = create_anndata_object(df, obs_names, gene_names)
     
-    # 添加空间坐标
+    # Add spatial coordinates
     adata.obsm["spatial"] = coords
     adata.layers["count"] = adata.X
     
-    # 添加基于用户指定区域的注释
+    # Add annotations based on user-specified regions
     add_custom_annotations(adata, coords, region_ranges)
     
     return adata
@@ -97,12 +97,12 @@ def process_single_file(file_path, region_ranges):
 
 def add_custom_annotations(adata, coords, region_ranges):
     """
-    根据用户指定的区域范围添加注释
+    Add annotations based on user-specified region ranges.
     
-    参数:
-        adata (ad.AnnData): AnnData对象
-        coords (np.array): 坐标数组
-        region_ranges (list): 区域范围列表
+    Parameters:
+        adata (ad.AnnData): AnnData object
+        coords (np.array): Coordinate array
+        region_ranges (list): List of region ranges
     """
     annotations = []
     
@@ -110,23 +110,23 @@ def add_custom_annotations(adata, coords, region_ranges):
         x, y = coord
         assigned_region = None
         
-        # 检查点是否在任何一个指定区域内[1](@ref)
+        # Check if the point is in any specified region
         for region in region_ranges:
             if region["name"] == "Layer2" and region["x_range"] is None:
-                # 默认区域，不匹配任何特定区域时使用
+                # Default region, used when not matching any specific region
                 continue
                 
             x_range = region["x_range"]
             y_range = region["y_range"]
             
-            # 检查点是否在当前区域内[1,5](@ref)
+            # Check if the point is within the current region
             if (x_range[0] <= x <= x_range[1]) and (y_range[0] <= y <= y_range[1]):
                 assigned_region = region["name"]
                 break
         
-        # 如果没有匹配任何特定区域，则分配到默认区域
+        # If not matching any specific region, assign to default region
         if assigned_region is None:
-            # 查找默认区域（通常是最后一个）
+            # Find the default region (usually the last one)
             for region in region_ranges:
                 if region["x_range"] is None or region["name"] == "Layer2":
                     assigned_region = region["name"]
@@ -139,15 +139,15 @@ def add_custom_annotations(adata, coords, region_ranges):
 
 def is_point_in_region(x, y, region):
     """
-    判断点是否在指定区域内[1](@ref)
+    Check if a point is within a specified region.
     
-    参数:
-        x (float): 点的x坐标
-        y (float): 点的y坐标
-        region (dict): 区域信息，包含x_range和y_range
+    Parameters:
+        x (float): X-coordinate of the point
+        y (float): Y-coordinate of the point
+        region (dict): Region information, containing x_range and y_range
     
-    返回:
-        bool: 点是否在区域内
+    Returns:
+        bool: Whether the point is within the region
     """
     if region["x_range"] is None or region["y_range"] is None:
         return False
@@ -160,28 +160,28 @@ def is_point_in_region(x, y, region):
 
 def print_region_statistics(adata, region_ranges):
     """
-    打印各区域的统计信息
+    Print statistical information for each region.
     
-    参数:
-        adata (ad.AnnData): AnnData对象
-        region_ranges (list): 区域范围列表
+    Parameters:
+        adata (ad.AnnData): AnnData object
+        region_ranges (list): List of region ranges
     """
-    print("区域统计信息:")
+    print("Region statistics:")
     for region in region_ranges:
         region_name = region["name"]
         count = (adata.obs["annotation"] == region_name).sum()
-        print(f"  {region_name}: {count} 个点")
+        print(f"  {region_name}: {count} points")
         
-        # 打印区域范围信息
+        # Print region range information
         if region["x_range"] is not None:
             x_range = region["x_range"]
             y_range = region["y_range"]
-            print(f"    范围: x={x_range[0]}-{x_range[1]}, y={y_range[0]}-{y_range[1]}")
+            print(f"    Range: x={x_range[0]}-{x_range[1]}, y={y_range[0]}-{y_range[1]}")
 
 
-# 以下辅助函数保持不变（与之前相同）
+# The following helper functions remain unchanged (same as before)
 def extract_gene_names(df):
-    """从数据框中提取基因名称"""
+    """Extract gene names from the data frame"""
     if df.columns[0] == "gene":
         gene_names = df["gene"].values
         df = df.drop(columns="gene")
@@ -193,7 +193,7 @@ def extract_gene_names(df):
 
 
 def parse_coordinates(index):
-    """从索引字符串解析坐标信息"""
+    """Parse coordinate information from index strings"""
     coords = []
     for idx in index:
         coord_parts = idx.split(":")
@@ -206,12 +206,12 @@ def parse_coordinates(index):
 
 
 def create_observation_names(index):
-    """创建观测名称（添加C前缀）"""
+    """Create observation names (add C prefix)"""
     return ["C" + str(idx) for idx in index]
 
 
 def create_anndata_object(df, obs_names, gene_names):
-    """创建AnnData对象"""
+    """Create AnnData object"""
     return ad.AnnData(
         X=df.astype(np.float32).values,
         obs=pd.DataFrame(index=obs_names),
@@ -220,31 +220,31 @@ def create_anndata_object(df, obs_names, gene_names):
 
 
 def save_h5ad_file(adata, file_path, output_dir):
-    """保存h5ad文件"""
+    """Save h5ad file"""
     base_name = os.path.basename(file_path)
     output_path = os.path.join(output_dir, base_name + ".h5ad")
     adata.write_h5ad(output_path)
 
 
-# 使用示例
+# Usage example
 if __name__ == "__main__":
     input_directory = "./Sim_hot30/ExpressionPhenotypeSimulateTask/"
     
-    # 示例1：使用默认范围（27<=x<=30和27<=y<=30）
-    print("=== 使用默认范围 ===")
+    # Example 1: Use default ranges (27<=x<=30 and 27<=y<=30)
+    print("=== Using default ranges ===")
     convert_spatial_to_h5ad(input_directory)
     
-    # 示例2：使用自定义范围
-    print("\n=== 使用自定义范围 ===")
+    # Example 2: Use custom ranges
+    print("\n=== Using custom ranges ===")
     custom_ranges = [
         {"name": "Hotspot1", "x_range": (25, 28), "y_range": (25, 28)},
         {"name": "Hotspot2", "x_range": (32, 35), "y_range": (32, 35)},
-        {"name": "Background", "x_range": None, "y_range": None}  # 默认区域
+        {"name": "Background", "x_range": None, "y_range": None}  # Default region
     ]
     convert_spatial_to_h5ad(input_directory, "h5ad_custom", custom_ranges)
     
-    # 示例3：使用多个复杂区域
-    print("\n=== 使用多个复杂区域 ===")
+    # Example 3: Use multiple complex regions
+    print("\n=== Using multiple complex regions ===")
     complex_ranges = [
         {"name": "Region_A", "x_range": (20, 25), "y_range": (20, 25)},
         {"name": "Region_B", "x_range": (30, 35), "y_range": (30, 35)},
